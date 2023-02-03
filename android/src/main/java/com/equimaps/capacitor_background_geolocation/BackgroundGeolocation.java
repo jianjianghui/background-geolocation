@@ -26,6 +26,9 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.android.BuildConfig;
+
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.tasks.OnSuccessListener;
 
@@ -48,21 +51,37 @@ public class BackgroundGeolocation extends Plugin {
     private Boolean stoppedWithoutPermissions = false;
 
     private void fetchLastLocation(PluginCall call) {
-        try {
-            LocationServices.getFusedLocationProviderClient(
-                    getContext()
-            ).getLastLocation().addOnSuccessListener(
-                    getActivity(),
-                    new OnSuccessListener<Location>() {
-                        @Override
-                        public void onSuccess(Location location) {
-                            if (location != null) {
-                                call.resolve(formatLocation(location));
+        int gmsResultCode = GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(getContext());
+        boolean supportGPS = gmsResultCode == ConnectionResult.SUCCESS;
+
+        if(supportGPS) {
+            try {
+                LocationServices.getFusedLocationProviderClient(
+                        getContext()
+                ).getLastLocation().addOnSuccessListener(
+                        getActivity(),
+                        new OnSuccessListener<Location>() {
+                            @Override
+                            public void onSuccess(Location location) {
+                                if (location != null) {
+                                    call.resolve(formatLocation(location));
+                                }
                             }
                         }
-                    }
-            );
-        } catch (SecurityException ignore) {}
+                );
+            } catch (SecurityException ignore) {}
+        }else {
+            LocationManager lm = (LocationManager) getContext().getSystemService(Context.LOCATION_SERVICE);
+            String provider = lm.getBestProvider(BackgroundGeolocationService.criteria000, true);
+            // getCurrentLocation; API level 30
+            Location location = lm.getLastKnownLocation(provider);
+            if(location == null) {
+                // Try to get the current location over the network
+                location = lm.getLastKnownLocation("network");
+            }
+            call.resolve(formatLocation(location));
+        }
+
     }
 
     @PluginMethod(returnType=PluginMethod.RETURN_CALLBACK)
@@ -71,6 +90,7 @@ public class BackgroundGeolocation extends Plugin {
             call.reject("Service not running.");
             return;
         }
+
         call.setKeepAlive(true);
         if (!hasRequiredPermissions()) {
             if (call.getBoolean("requestPermissions", true)) {
@@ -82,6 +102,7 @@ public class BackgroundGeolocation extends Plugin {
         } else if (!isLocationEnabled(getContext())) {
             call.reject("Location services disabled.", "NOT_AUTHORIZED");
         }
+
         if (call.getBoolean("stale", false)) {
             fetchLastLocation(call);
         }
@@ -89,29 +110,19 @@ public class BackgroundGeolocation extends Plugin {
         String backgroundMessage = call.getString("backgroundMessage");
         if (backgroundMessage != null) {
             Notification.Builder builder = new Notification.Builder(getContext())
-                    .setContentTitle(
-                            call.getString(
-                                "backgroundTitle",
-                                "Using your location"
-                            )
-                    )
+                    .setContentTitle(call.getString("backgroundTitle", "Using your location"))
                     .setContentText(backgroundMessage)
                     .setOngoing(true)
                     .setPriority(Notification.PRIORITY_HIGH)
                     .setWhen(System.currentTimeMillis());
 
             try {
-                String name = getAppString(
-                        "capacitor_background_geolocation_notification_icon",
-                        "mipmap/ic_launcher"
-                );
+                String name = getAppString("capacitor_background_geolocation_notification_icon", "mipmap/ic_launcher");
                 String[] parts = name.split("/");
                 // It is actually necessary to set a valid icon for the notification to behave
                 // correctly when tapped. If there is no icon specified, tapping it will open the
                 // app's settings, rather than bringing the application to the foreground.
-                builder.setSmallIcon(
-                        getAppResourceIdentifier(parts[1], parts[0])
-                );
+                builder.setSmallIcon(getAppResourceIdentifier(parts[1], parts[0]));
             } catch (Exception e) {
                 Logger.error("Could not set notification icon", e);
             }

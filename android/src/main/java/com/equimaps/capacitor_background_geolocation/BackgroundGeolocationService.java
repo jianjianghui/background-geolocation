@@ -2,13 +2,21 @@ package com.equimaps.capacitor_background_geolocation;
 
 import android.app.Notification;
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
 import android.location.Location;
 import android.os.Binder;
+import android.os.Bundle;
 import android.os.IBinder;
+import android.location.Criteria;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 
 import com.getcapacitor.Logger;
 import com.getcapacitor.android.BuildConfig;
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationAvailability;
 import com.google.android.gms.location.LocationCallback;
@@ -18,6 +26,7 @@ import com.google.android.gms.location.LocationServices;
 
 import java.util.HashSet;
 
+import androidx.annotation.NonNull;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 // A bound and started service that is promoted to a foreground service when
@@ -29,31 +38,37 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 // the activity comes back to the foreground, the foreground service stops, and
 // the notification associated with that service is removed.
 public class BackgroundGeolocationService extends Service {
-    static final String ACTION_BROADCAST = (
-            BackgroundGeolocationService.class.getPackage().getName() + ".broadcast"
-    );
+    static final String ACTION_BROADCAST = (BackgroundGeolocationService.class.getPackage().getName() + ".broadcast");
     private final IBinder binder = new LocalBinder();
 
     // Must be unique for this application.
     private static final int NOTIFICATION_ID = 28351;
 
+    private LocationManager locationManager;
+    private Criteria criteria;
+    public static Criteria criteria000;
+    private boolean isStarted = false;
+    private LocationListener mLocationListener;
+    private volatile Location lastGPSLocation;
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+
+        locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+
+        // Location criteria
+        criteria = new Criteria();
+        criteria000 = criteria;
+        criteria.setAltitudeRequired(false);
+        criteria.setBearingRequired(false);
+        criteria.setSpeedRequired(true);
+        criteria.setCostAllowed(true);
+    }
+
     @Override
     public IBinder onBind(Intent intent) {
         return binder;
-    }
-
-    // Some devices allow a foreground service to outlive the application's main
-    // activity, leading to nasty crashes as reported in issue #59. If we learn
-    // that the application has been killed, all watchers are stopped and the
-    // service is terminated immediately.
-    @Override
-    public boolean onUnbind(Intent intent) {
-        for (Watcher watcher : watchers) {
-            watcher.client.removeLocationUpdates(watcher.locationCallback);
-            watchers.remove(watcher);
-        }
-        stopSelf();
-        return false;
     }
 
     private class Watcher {
@@ -73,27 +88,17 @@ public class BackgroundGeolocationService extends Service {
         }
         return null;
     }
-
     // Handles requests from the activity.
     public class LocalBinder extends Binder {
-        void addWatcher(
-                final String id,
-                Notification backgroundNotification,
-                float distanceFilter
-        ) {
-            FusedLocationProviderClient client = LocationServices.getFusedLocationProviderClient(
-                    BackgroundGeolocationService.this
-            );
-            LocationRequest locationRequest = new LocationRequest();
-            locationRequest.setMaxWaitTime(1000);
-            locationRequest.setInterval(1000);
-            locationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
-            locationRequest.setSmallestDisplacement(distanceFilter);
+        void addWatcher(final String id, Notification backgroundNotification, float distanceFilter) {
+            int gmsResultCode = GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(getApplicationContext());
+            boolean supportGPS = gmsResultCode == ConnectionResult.SUCCESS;
 
-            LocationCallback callback = new LocationCallback(){
+            // 位置监听器
+            mLocationListener = new LocationListener() {
                 @Override
-                public void onLocationResult(LocationResult locationResult) {
-                    Location location = locationResult.getLastLocation();
+                public void onLocationChanged(final Location location) {
+                    Logger.debug("Location received");
                     Intent intent = new Intent(ACTION_BROADCAST);
                     intent.putExtra("location", location);
                     intent.putExtra("id", id);
@@ -101,35 +106,92 @@ public class BackgroundGeolocationService extends Service {
                             getApplicationContext()
                     ).sendBroadcast(intent);
                 }
-                @Override
-                public void onLocationAvailability(LocationAvailability availability) {
-                    if (!availability.isLocationAvailable() && BuildConfig.DEBUG) {
-                        Logger.debug("Location not available");
-                    }
-                }
             };
 
-            Watcher watcher = new Watcher();
-            watcher.id = id;
-            watcher.client = client;
-            watcher.locationRequest = locationRequest;
-            watcher.locationCallback = callback;
-            watcher.backgroundNotification = backgroundNotification;
-            watchers.add(watcher);
+            Logger.debug("GOOGLE:"+supportGPS);
+            if (supportGPS) {
+                FusedLocationProviderClient client = LocationServices
+                        .getFusedLocationProviderClient(BackgroundGeolocationService.this);
 
-            // According to Android Studio, this method can throw a Security Exception if
-            // permissions are not yet granted. Rather than check the permissions, which is fiddly,
-            // we simply ignore the exception.
-            try {
+                LocationRequest locationRequest = new LocationRequest();
+                locationRequest.setMaxWaitTime(1000);
+                locationRequest.setInterval(1000);
+                locationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
+                locationRequest.setSmallestDisplacement(distanceFilter);
+
+                LocationCallback callback = new LocationCallback(){
+                    @Override
+                    public void onLocationResult(LocationResult locationResult) {
+                        Location location = locationResult.getLastLocation();
+                        Intent intent = new Intent(ACTION_BROADCAST);
+                        intent.putExtra("location", location);
+                        intent.putExtra("id", id);
+                        LocalBroadcastManager.getInstance(
+                                getApplicationContext()
+                        ).sendBroadcast(intent);
+                    }
+                    @Override
+                    public void onLocationAvailability(LocationAvailability availability) {
+                        if (!availability.isLocationAvailable() && BuildConfig.DEBUG) {
+                            Logger.debug("Location not available");
+                        }
+                    }
+                };
+                Watcher watcher = new Watcher();
+                watcher.id = id;
+                watcher.client = client;
+                watcher.locationRequest = locationRequest;
+                watcher.locationCallback = callback;
+                watcher.backgroundNotification = backgroundNotification;
+                watchers.add(watcher);
+
+                // According to Android Studio, this method can throw a Security Exception if
+                // permissions are not yet granted. Rather than check the permissions, which is fiddly,
+                // we simply ignore the exception.
+                try {
                 watcher.client.requestLocationUpdates(
                         watcher.locationRequest,
                         watcher.locationCallback,
                         null
                 );
-            } catch (SecurityException ignore) {}
+                } catch (SecurityException ignore) {}
+            } else {
+                Logger.debug("Google Play Services not available, using Android location APIs");
+                Watcher watcher = new Watcher();
+                watcher.id = id;
+                watcher.backgroundNotification = backgroundNotification;
+                watchers.add(watcher);
+                criteria.setAccuracy(Criteria.ACCURACY_FINE);
+                criteria.setHorizontalAccuracy(Criteria.ACCURACY_HIGH);
+                criteria.setPowerRequirement(Criteria.POWER_HIGH);
+                String provider = locationManager.getBestProvider(criteria, true);
+
+                locationManager.requestLocationUpdates(provider, 1000, distanceFilter,new LocationListener() {
+                    @Override
+                    public void onLocationChanged(@NonNull Location location) {
+                        if(lastGPSLocation == null || (lastGPSLocation.getTime() <= location.getTime())) {
+                            lastGPSLocation = location;
+                        }
+                        mLocationListener.onLocationChanged(location);
+                    }
+                });
+
+                Logger.debug("success");
+            }
         }
 
         void removeWatcher(String id) {
+            int gmsResultCode = GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(getApplicationContext());
+            boolean isGMS = gmsResultCode == ConnectionResult.SUCCESS;
+            if(!isGMS) {
+                Logger.debug("Location Listener removed");
+                locationManager.removeUpdates(mLocationListener);
+                if (getNotification() == null) {
+                    stopForeground(true);
+                }
+                return;
+            }
+
             for (Watcher watcher : watchers) {
                 if (watcher.id.equals(id)) {
                     watcher.client.removeLocationUpdates(watcher.locationCallback);
