@@ -78,7 +78,7 @@ public class BackgroundGeolocation extends Plugin {
             Location location = lm.getLastKnownLocation(provider);
             if(location == null) {
                 // Try to get the current location over the network
-                location = lm.getLastKnownLocation("network");
+                location = lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
             }
 
             if(location != null) {
@@ -93,9 +93,16 @@ public class BackgroundGeolocation extends Plugin {
                             call.resolve(formatLocation(location));
                         }
                     }
-
-                    // 实现其他方法
-                }, Looper.myLooper());
+                },null);
+                lm.requestSingleUpdate(LocationManager.NETWORK_PROVIDER, new LocationListener() {
+                    @Override
+                    public void onLocationChanged(Location location) {
+                        if (location != null) {
+                            // 处理位置信息
+                            call.resolve(formatLocation(location));
+                        }
+                    }
+                },null);
             }
 
         }
