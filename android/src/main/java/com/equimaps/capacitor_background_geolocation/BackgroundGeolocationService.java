@@ -6,15 +6,12 @@ import android.content.Context;
 import android.content.Intent;
 import android.location.Location;
 import android.os.Binder;
-import android.os.Bundle;
 import android.os.IBinder;
 import android.location.Criteria;
-import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 
 import com.getcapacitor.Logger;
-import com.getcapacitor.android.BuildConfig;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.android.gms.location.FusedLocationProviderClient;
@@ -132,7 +129,7 @@ public class BackgroundGeolocationService extends Service {
                     }
                     @Override
                     public void onLocationAvailability(LocationAvailability availability) {
-                        if (!availability.isLocationAvailable() && BuildConfig.DEBUG) {
+                        if (!availability.isLocationAvailable()) {
                             Logger.debug("Location not available");
                         }
                     }
@@ -149,11 +146,11 @@ public class BackgroundGeolocationService extends Service {
                 // permissions are not yet granted. Rather than check the permissions, which is fiddly,
                 // we simply ignore the exception.
                 try {
-                watcher.client.requestLocationUpdates(
-                        watcher.locationRequest,
-                        watcher.locationCallback,
-                        null
-                );
+                    watcher.client.requestLocationUpdates(
+                            watcher.locationRequest,
+                            watcher.locationCallback,
+                            null
+                    );
                 } catch (SecurityException ignore) {}
             } else {
                 Logger.debug("Google Play Services not available, using Android location APIs");

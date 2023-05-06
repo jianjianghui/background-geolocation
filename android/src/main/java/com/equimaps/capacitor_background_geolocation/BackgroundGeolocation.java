@@ -13,10 +13,12 @@ import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.location.Location;
+import android.location.LocationListener;
 import android.location.LocationManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.IBinder;
+import android.os.Looper;
 import android.provider.Settings;
 
 import com.getcapacitor.JSObject;
@@ -25,7 +27,6 @@ import com.getcapacitor.NativePlugin;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
-import com.getcapacitor.android.BuildConfig;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
@@ -79,7 +80,24 @@ public class BackgroundGeolocation extends Plugin {
                 // Try to get the current location over the network
                 location = lm.getLastKnownLocation("network");
             }
-            call.resolve(formatLocation(location));
+
+            if(location != null) {
+                call.resolve(formatLocation(location));
+            }else {
+                // 请求位置更新
+                lm.requestSingleUpdate(provider, new LocationListener() {
+                    @Override
+                    public void onLocationChanged(Location location) {
+                        if (location != null) {
+                            // 处理位置信息
+                            call.resolve(formatLocation(location));
+                        }
+                    }
+
+                    // 实现其他方法
+                }, Looper.myLooper());
+            }
+
         }
 
     }
@@ -93,7 +111,7 @@ public class BackgroundGeolocation extends Plugin {
 
         call.setKeepAlive(true);
         if (!hasRequiredPermissions()) {
-            if (call.getBoolean("requestPermissions", true)) {
+            if (Boolean.TRUE.equals(call.getBoolean("requestPermissions", true))) {
                 callPendingPermissions = call;
                 pluginRequestAllPermissions();
             } else {
@@ -103,7 +121,7 @@ public class BackgroundGeolocation extends Plugin {
             call.reject("Location services disabled.", "NOT_AUTHORIZED");
         }
 
-        if (call.getBoolean("stale", false)) {
+        if (Boolean.TRUE.equals(call.getBoolean("stale", false))) {
             fetchLastLocation(call);
         }
         Notification backgroundNotification = null;
@@ -170,7 +188,7 @@ public class BackgroundGeolocation extends Plugin {
                 return;
             }
         }
-        if (call.getBoolean("stale", false)) {
+        if (Boolean.TRUE.equals(call.getBoolean("stale", false))) {
             fetchLastLocation(call);
         }
         if (service != null) {
@@ -260,9 +278,7 @@ public class BackgroundGeolocation extends Plugin {
             }
             Location location = intent.getParcelableExtra("location");
             if (location == null) {
-                if (BuildConfig.DEBUG) {
-                    call.error("No locations received");
-                }
+                Logger.info("No locations received");
                 return;
             }
             call.success(formatLocation(location));
