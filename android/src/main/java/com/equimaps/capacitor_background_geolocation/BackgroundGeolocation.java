@@ -17,6 +17,7 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.IBinder;
 import android.os.Looper;
 import android.provider.Settings;
@@ -35,6 +36,7 @@ import com.google.android.gms.tasks.OnSuccessListener;
 
 import org.json.JSONObject;
 
+import androidx.annotation.NonNull;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 @NativePlugin(
@@ -93,6 +95,20 @@ public class BackgroundGeolocation extends Plugin {
                             call.resolve(formatLocation(location));
                         }
                     }
+                    @Override
+                    public void onProviderEnabled(@NonNull String provider) {
+
+                    }
+
+                    @Override
+                    public void onProviderDisabled(@NonNull String provider) {
+
+                    }
+
+                    @Override
+                    public void onStatusChanged(String provider, int status, Bundle extras) {
+
+                    }
                 },null);
                 lm.requestSingleUpdate(LocationManager.NETWORK_PROVIDER, new LocationListener() {
                     @Override
@@ -101,6 +117,20 @@ public class BackgroundGeolocation extends Plugin {
                             // 处理位置信息
                             call.resolve(formatLocation(location));
                         }
+                    }
+                    @Override
+                    public void onProviderEnabled(@NonNull String provider) {
+
+                    }
+
+                    @Override
+                    public void onProviderDisabled(@NonNull String provider) {
+
+                    }
+
+                    @Override
+                    public void onStatusChanged(String provider, int status, Bundle extras) {
+
                     }
                 },null);
             }
