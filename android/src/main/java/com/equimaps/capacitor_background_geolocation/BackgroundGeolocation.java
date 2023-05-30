@@ -78,78 +78,80 @@ public class BackgroundGeolocation extends Plugin {
             } catch (SecurityException ignore) {
             }
         } else {
-            if (lm == null) {
-                lm = (LocationManager) getContext().getSystemService(Context.LOCATION_SERVICE);
-            }
+            try {
+                if (lm == null) {
+                    lm = (LocationManager) getContext().getSystemService(Context.LOCATION_SERVICE);
+                }
 
-            String provider = lm.getBestProvider(BackgroundGeolocationService.criteria000, true);
-            if (provider == null || "".equals(provider)) {
-                provider = LocationManager.GPS_PROVIDER;
-            }
+                String provider = lm.getBestProvider(BackgroundGeolocationService.criteria000, true);
+                if (provider == null || "".equals(provider)) {
+                    provider = LocationManager.GPS_PROVIDER;
+                }
 
-            // getCurrentLocation; API level 30
-            Location location = lm.getLastKnownLocation(provider);
-            if (location == null) {
-                // Try to get the current location over the network
-                location = lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
-            }
+                // getCurrentLocation; API level 30
+                Location location = lm.getLastKnownLocation(provider);
+                if (location == null) {
+                    // Try to get the current location over the network
+                    location = lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+                }
 
-            if (location != null) {
-                call.resolve(formatLocation(location));
-            } else {
-                // 请求位置更新
-                lm.requestSingleUpdate(provider, new LocationListener() {
-                    @Override
-                    public void onLocationChanged(Location location) {
-                        if (location != null) {
-                            // 处理位置信息
-                            call.resolve(formatLocation(location));
-                            lm.removeUpdates(this);
+                if (location != null) {
+                    call.resolve(formatLocation(location));
+                } else {
+                    // 请求位置更新
+                    lm.requestSingleUpdate(provider, new LocationListener() {
+                        @Override
+                        public void onLocationChanged(Location location) {
+                            if (location != null) {
+                                // 处理位置信息
+                                call.resolve(formatLocation(location));
+                                lm.removeUpdates(this);
+                            }
                         }
-                    }
 
-                    @Override
-                    public void onProviderEnabled(@NonNull String provider) {
+                        @Override
+                        public void onProviderEnabled(@NonNull String provider) {
 
-                    }
-
-                    @Override
-                    public void onProviderDisabled(@NonNull String provider) {
-
-                    }
-
-                    @Override
-                    public void onStatusChanged(String provider, int status, Bundle extras) {
-
-                    }
-                }, null);
-                lm.requestSingleUpdate(LocationManager.NETWORK_PROVIDER, new LocationListener() {
-                    @Override
-                    public void onLocationChanged(Location location) {
-                        if (location != null) {
-                            // 处理位置信息
-                            call.resolve(formatLocation(location));
-                            lm.removeUpdates(this);
                         }
-                    }
 
-                    @Override
-                    public void onProviderEnabled(@NonNull String provider) {
+                        @Override
+                        public void onProviderDisabled(@NonNull String provider) {
 
-                    }
+                        }
 
-                    @Override
-                    public void onProviderDisabled(@NonNull String provider) {
+                        @Override
+                        public void onStatusChanged(String provider, int status, Bundle extras) {
 
-                    }
+                        }
+                    }, null);
+                    lm.requestSingleUpdate(LocationManager.NETWORK_PROVIDER, new LocationListener() {
+                        @Override
+                        public void onLocationChanged(Location location) {
+                            if (location != null) {
+                                // 处理位置信息
+                                call.resolve(formatLocation(location));
+                                lm.removeUpdates(this);
+                            }
+                        }
 
-                    @Override
-                    public void onStatusChanged(String provider, int status, Bundle extras) {
+                        @Override
+                        public void onProviderEnabled(@NonNull String provider) {
 
-                    }
-                }, null);
+                        }
+
+                        @Override
+                        public void onProviderDisabled(@NonNull String provider) {
+
+                        }
+
+                        @Override
+                        public void onStatusChanged(String provider, int status, Bundle extras) {
+
+                        }
+                    }, null);
+                }
+            } catch (SecurityException ignore) {
             }
-
         }
 
     }
