@@ -73,7 +73,7 @@ public class BackgroundGeolocationService extends Service {
         public String id;
         public FusedLocationProviderClient client;
         public LocationListener locationListener;
-        public Float distanceFilter;
+        public float distanceFilter = 1000;
         public LocationRequest locationRequest;
         public LocationCallback locationCallback;
         public Notification backgroundNotification;
@@ -205,13 +205,16 @@ public class BackgroundGeolocationService extends Service {
                 watcher.id = id;
                 watcher.backgroundNotification = backgroundNotification;
                 watcher.locationListener = locationListener;
+                watcher.distanceFilter = distanceFilter;
                 watchers.add(watcher);
                 criteria.setAccuracy(Criteria.ACCURACY_FINE);
                 criteria.setHorizontalAccuracy(Criteria.ACCURACY_HIGH);
                 criteria.setPowerRequirement(Criteria.POWER_HIGH);
                 String provider = locationManager.getBestProvider(criteria, true);
+                if (provider != null) {
+                    locationManager.requestLocationUpdates(provider, 1000, distanceFilter, watcher.locationListener);
+                }
 
-                locationManager.requestLocationUpdates(provider, 1000, distanceFilter, watcher.locationListener);
 
                 Logger.debug("success");
             }
