@@ -40,7 +40,7 @@ import androidx.annotation.NonNull;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 @NativePlugin(
-        permissions={
+        permissions = {
                 // As of API level 31, the coarse permission MUST accompany
                 // the fine permission.
                 Manifest.permission.ACCESS_COARSE_LOCATION,
@@ -53,11 +53,14 @@ public class BackgroundGeolocation extends Plugin {
     private PluginCall callPendingPermissions = null;
     private Boolean stoppedWithoutPermissions = false;
 
+    private LocationManager lm;
+
+
     private void fetchLastLocation(PluginCall call) {
         int gmsResultCode = GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(getContext());
         boolean supportGPS = gmsResultCode == ConnectionResult.SUCCESS;
 
-        if(supportGPS) {
+        if (supportGPS) {
             try {
                 LocationServices.getFusedLocationProviderClient(
                         getContext()
@@ -72,20 +75,28 @@ public class BackgroundGeolocation extends Plugin {
                             }
                         }
                 );
-            } catch (SecurityException ignore) {}
-        }else {
-            LocationManager lm = (LocationManager) getContext().getSystemService(Context.LOCATION_SERVICE);
+            } catch (SecurityException ignore) {
+            }
+        } else {
+            if (lm == null) {
+                lm = (LocationManager) getContext().getSystemService(Context.LOCATION_SERVICE);
+            }
+
             String provider = lm.getBestProvider(BackgroundGeolocationService.criteria000, true);
+            if (provider == null || "".equals(provider)) {
+                provider = LocationManager.GPS_PROVIDER;
+            }
+
             // getCurrentLocation; API level 30
             Location location = lm.getLastKnownLocation(provider);
-            if(location == null) {
+            if (location == null) {
                 // Try to get the current location over the network
                 location = lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
             }
 
-            if(location != null) {
+            if (location != null) {
                 call.resolve(formatLocation(location));
-            }else {
+            } else {
                 // 请求位置更新
                 lm.requestSingleUpdate(provider, new LocationListener() {
                     @Override
@@ -93,8 +104,10 @@ public class BackgroundGeolocation extends Plugin {
                         if (location != null) {
                             // 处理位置信息
                             call.resolve(formatLocation(location));
+                            lm.removeUpdates(this);
                         }
                     }
+
                     @Override
                     public void onProviderEnabled(@NonNull String provider) {
 
@@ -109,15 +122,17 @@ public class BackgroundGeolocation extends Plugin {
                     public void onStatusChanged(String provider, int status, Bundle extras) {
 
                     }
-                },null);
+                }, null);
                 lm.requestSingleUpdate(LocationManager.NETWORK_PROVIDER, new LocationListener() {
                     @Override
                     public void onLocationChanged(Location location) {
                         if (location != null) {
                             // 处理位置信息
                             call.resolve(formatLocation(location));
+                            lm.removeUpdates(this);
                         }
                     }
+
                     @Override
                     public void onProviderEnabled(@NonNull String provider) {
 
@@ -132,14 +147,14 @@ public class BackgroundGeolocation extends Plugin {
                     public void onStatusChanged(String provider, int status, Bundle extras) {
 
                     }
-                },null);
+                }, null);
             }
 
         }
 
     }
 
-    @PluginMethod(returnType=PluginMethod.RETURN_CALLBACK)
+    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK)
     public void addWatcher(final PluginCall call) {
         if (service == null) {
             call.reject("Service not running.");
@@ -261,13 +276,12 @@ public class BackgroundGeolocation extends Plugin {
     }
 
     // Checks if device-wide location services are disabled
-    private static Boolean isLocationEnabled(Context context)
-    {
+    private static Boolean isLocationEnabled(Context context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             LocationManager lm = (LocationManager) context.getSystemService(Context.LOCATION_SERVICE);
             return lm != null && lm.isLocationEnabled();
         } else {
-            return  (
+            return (
                     Settings.Secure.getInt(
                             context.getContentResolver(),
                             Settings.Secure.LOCATION_MODE,

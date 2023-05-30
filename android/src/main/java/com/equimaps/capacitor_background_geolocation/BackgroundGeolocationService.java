@@ -72,10 +72,13 @@ public class BackgroundGeolocationService extends Service {
     private class Watcher {
         public String id;
         public FusedLocationProviderClient client;
+        public LocationListener locationListener;
+        public Float distanceFilter;
         public LocationRequest locationRequest;
         public LocationCallback locationCallback;
         public Notification backgroundNotification;
     }
+
     private HashSet<Watcher> watchers = new HashSet<Watcher>();
 
     Notification getNotification() {
@@ -86,6 +89,7 @@ public class BackgroundGeolocationService extends Service {
         }
         return null;
     }
+
     // Handles requests from the activity.
     public class LocalBinder extends Binder {
         void addWatcher(final String id, Notification backgroundNotification, float distanceFilter) {
@@ -121,7 +125,7 @@ public class BackgroundGeolocationService extends Service {
                 }
             };
 
-            Logger.debug("GOOGLE:"+supportGPS);
+            Logger.debug("GOOGLE:" + supportGPS);
             if (supportGPS) {
                 FusedLocationProviderClient client = LocationServices
                         .getFusedLocationProviderClient(BackgroundGeolocationService.this);
@@ -132,7 +136,7 @@ public class BackgroundGeolocationService extends Service {
                 locationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
                 locationRequest.setSmallestDisplacement(distanceFilter);
 
-                LocationCallback callback = new LocationCallback(){
+                LocationCallback callback = new LocationCallback() {
                     @Override
                     public void onLocationResult(LocationResult locationResult) {
                         Location location = locationResult.getLastLocation();
@@ -143,6 +147,7 @@ public class BackgroundGeolocationService extends Service {
                                 getApplicationContext()
                         ).sendBroadcast(intent);
                     }
+
                     @Override
                     public void onLocationAvailability(LocationAvailability availability) {
                         if (!availability.isLocationAvailable()) {
@@ -154,6 +159,7 @@ public class BackgroundGeolocationService extends Service {
                 watcher.id = id;
                 watcher.client = client;
                 watcher.locationRequest = locationRequest;
+                watcher.distanceFilter = distanceFilter;
                 watcher.locationCallback = callback;
                 watcher.backgroundNotification = backgroundNotification;
                 watchers.add(watcher);
@@ -167,26 +173,19 @@ public class BackgroundGeolocationService extends Service {
                             watcher.locationCallback,
                             null
                     );
-                } catch (SecurityException ignore) {}
+                } catch (SecurityException ignore) {
+                }
             } else {
                 Logger.debug("Google Play Services not available, using Android location APIs");
-                Watcher watcher = new Watcher();
-                watcher.id = id;
-                watcher.backgroundNotification = backgroundNotification;
-                watchers.add(watcher);
-                criteria.setAccuracy(Criteria.ACCURACY_FINE);
-                criteria.setHorizontalAccuracy(Criteria.ACCURACY_HIGH);
-                criteria.setPowerRequirement(Criteria.POWER_HIGH);
-                String provider = locationManager.getBestProvider(criteria, true);
-
-                locationManager.requestLocationUpdates(provider, 1000, distanceFilter,new LocationListener() {
+                LocationListener locationListener = new LocationListener() {
                     @Override
                     public void onLocationChanged(@NonNull Location location) {
-                        if(lastGPSLocation == null || (lastGPSLocation.getTime() <= location.getTime())) {
+                        if (lastGPSLocation == null || (lastGPSLocation.getTime() <= location.getTime())) {
                             lastGPSLocation = location;
                         }
                         mLocationListener.onLocationChanged(location);
                     }
+
                     @Override
                     public void onProviderEnabled(@NonNull String provider) {
 
@@ -201,7 +200,18 @@ public class BackgroundGeolocationService extends Service {
                     public void onStatusChanged(String provider, int status, Bundle extras) {
 
                     }
-                });
+                };
+                Watcher watcher = new Watcher();
+                watcher.id = id;
+                watcher.backgroundNotification = backgroundNotification;
+                watcher.locationListener = locationListener;
+                watchers.add(watcher);
+                criteria.setAccuracy(Criteria.ACCURACY_FINE);
+                criteria.setHorizontalAccuracy(Criteria.ACCURACY_HIGH);
+                criteria.setPowerRequirement(Criteria.POWER_HIGH);
+                String provider = locationManager.getBestProvider(criteria, true);
+
+                locationManager.requestLocationUpdates(provider, 1000, distanceFilter, watcher.locationListener);
 
                 Logger.debug("success");
             }
@@ -210,19 +220,16 @@ public class BackgroundGeolocationService extends Service {
         void removeWatcher(String id) {
             int gmsResultCode = GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(getApplicationContext());
             boolean isGMS = gmsResultCode == ConnectionResult.SUCCESS;
-            if(!isGMS) {
-                Logger.debug("Location Listener removed");
-                locationManager.removeUpdates(mLocationListener);
-                if (getNotification() == null) {
-                    stopForeground(true);
-                }
-                return;
-            }
-
             for (Watcher watcher : watchers) {
                 if (watcher.id.equals(id)) {
-                    watcher.client.removeLocationUpdates(watcher.locationCallback);
+                    if (!isGMS) {
+                        Logger.debug("删除监听器：" + String.valueOf(watcher.locationListener));
+                        locationManager.removeUpdates(watcher.locationListener);
+                    } else {
+                        watcher.client.removeLocationUpdates(watcher.locationCallback);
+                    }
                     watchers.remove(watcher);
+                    Logger.debug("剩余监听器：" + watchers.size());
                     if (getNotification() == null) {
                         stopForeground(true);
                     }
@@ -235,6 +242,10 @@ public class BackgroundGeolocationService extends Service {
             // If permissions were granted while the app was in the background, for example in
             // the Settings app, the watchers need restarting.
             for (Watcher watcher : watchers) {
+                if (watcher.locationListener != null) {
+                    String provider = locationManager.getBestProvider(criteria, true);
+                    locationManager.requestLocationUpdates(provider, 1000, watcher.distanceFilter, watcher.locationListener);
+                }
                 watcher.client.removeLocationUpdates(watcher.locationCallback);
                 watcher.client.requestLocationUpdates(
                         watcher.locationRequest,
