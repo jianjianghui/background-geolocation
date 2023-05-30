@@ -39,6 +39,9 @@ import org.json.JSONObject;
 import androidx.annotation.NonNull;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @NativePlugin(
         permissions = {
                 // As of API level 31, the coarse permission MUST accompany
@@ -55,6 +58,7 @@ public class BackgroundGeolocation extends Plugin {
 
     private LocationManager lm;
 
+    private List<PluginCall> needHandle = new ArrayList<>();
 
     private void fetchLastLocation(PluginCall call) {
         int gmsResultCode = GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(getContext());
@@ -76,6 +80,7 @@ public class BackgroundGeolocation extends Plugin {
                         }
                 );
             } catch (SecurityException ignore) {
+                needHandle.add(call);
             }
         } else {
             try {
@@ -151,6 +156,7 @@ public class BackgroundGeolocation extends Plugin {
                     }, null);
                 }
             } catch (SecurityException ignore) {
+                needHandle.add(call);
             }
         }
 
@@ -402,6 +408,10 @@ public class BackgroundGeolocation extends Plugin {
         if (service != null) {
             service.onActivityStarted();
             if (stoppedWithoutPermissions && hasRequiredPermissions()) {
+                for (int i = 0; i < needHandle.size(); i++) {
+                    this.fetchLastLocation(needHandle.get(i));
+                }
+                needHandle.clear();
                 service.onPermissionsGranted();
             }
         }

@@ -248,13 +248,14 @@ public class BackgroundGeolocationService extends Service {
                 if (watcher.locationListener != null) {
                     String provider = locationManager.getBestProvider(criteria, true);
                     locationManager.requestLocationUpdates(provider, 1000, watcher.distanceFilter, watcher.locationListener);
+                } else {
+                    watcher.client.removeLocationUpdates(watcher.locationCallback);
+                    watcher.client.requestLocationUpdates(
+                            watcher.locationRequest,
+                            watcher.locationCallback,
+                            null
+                    );
                 }
-                watcher.client.removeLocationUpdates(watcher.locationCallback);
-                watcher.client.requestLocationUpdates(
-                        watcher.locationRequest,
-                        watcher.locationCallback,
-                        null
-                );
             }
         }
 
